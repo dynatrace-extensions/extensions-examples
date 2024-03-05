@@ -1,0 +1,88 @@
+name: custom:my.sql.stats
+version: "0.0.1"
+minDynatraceVersion: "1.279.0"
+author:
+  name: Vagiz
+
+metrics:
+  - key: my.sql.stats.value
+    metadata:
+      displayName: My values
+      unit: Count
+
+  - key: my.sql.stats.batch_total
+    metadata:
+      displayName: My Batch total
+      unit: Count
+
+  - key: my.sql.stats.batch_size
+    metadata:
+      displayName: My Batch size
+      unit: Count
+
+sqlServer:
+  - group: Latest data
+    featureSet: "Latest"
+    interval:
+      minutes: 1
+    ingest: metrics
+    query: >
+      SELECT TOP(1)
+        VALUE AS value
+      FROM
+        my_stats ms 
+      WHERE
+        ms.TMSTMP >= DATEADD(minute, -1, GETDATE())
+      ORDER BY
+        ms.VALUE DESC
+    metrics:
+      - key: my.sql.stats.value
+        value: col:value
+    dimensions:
+      - key: stat_name
+        value: const:latest
+
+  - group: Batch data
+    featureSet: Batch
+    interval:
+      minutes: 10
+    ingest: metrics
+    query: >
+      SELECT
+        SUM(ms.VALUE) AS total,
+        COUNT(*) AS batch
+      FROM
+        my_stats ms 
+      WHERE
+        ms.TMSTMP >= DATEADD(minute, -10, GETDATE())
+    metrics:
+      - key: my.sql.stats.batch_total
+        value: col:total
+      - key: my.sql.stats.batch_size
+        value: col:batch
+    dimensions:
+      - key: stat_name
+        value: const:batch
+
+  - group: Message data
+    featureSet: Messages
+    interval:
+      minutes: 5
+    ingest: log
+    query: >
+      SELECT
+        ms.TMSTMP AS tmstmp,
+        ISNULL(ms.message, 'Error: no message') AS message
+      FROM
+        my_stats ms
+      WHERE
+        ms.TMSTMP >= DATEADD(minute, -5, GETDATE())
+      ORDER BY
+        ms.TMSTMP DESC
+    attributes:
+      - key: content
+        value: col:message
+      - key: event.group
+        value: const:messages
+      - key: timestamp
+        value: col:tmstmp
